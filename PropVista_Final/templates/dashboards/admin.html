@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Admin Command Center | PropVista{% endblock %}
+{% block content %}
+<section class="dashboard-shell">
+  {% include "partials/sidebar.html" %}
+  <div class="dashboard-main">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3 mb-4 reveal">
+      <div><span class="pv-eyebrow"><i class="bi bi-command"></i> Supervision layer</span><h1 class="pv-serif display-5 mt-3">Admin command center</h1><p class="pv-muted fs-5">Monitor users, property health, approval queues, and platform signals.</p></div>
+      <div class="admin-toolbar">
+        <a class="pv-btn pv-btn-ghost" href="{% url 'accounts:admin_users' %}"><i class="bi bi-people"></i> User Management</a>
+        <a class="pv-btn pv-btn-primary" href="/admin/">Open Django admin</a>
+      </div>
+    </div>
+    <div class="kpi-grid mb-4">
+      <div class="kpi-card pv-card reveal"><i class="bi bi-people"></i><span>Total users</span><strong data-counter="{{ total_users_count }}">0</strong></div>
+      <div class="kpi-card pv-card reveal"><i class="bi bi-houses"></i><span>Properties</span><strong data-counter="{{ total_properties_count }}">0</strong></div>
+      <a href="{% url 'properties:approvals_list' %}" class="text-decoration-none text-reset">
+        <div class="kpi-card pv-card reveal"><i class="bi bi-shield-check"></i><span>Pending approvals</span><strong data-counter="{{ pending_properties.count }}">0</strong></div>
+      </a>
+      <div class="kpi-card pv-card reveal"><i class="bi bi-currency-rupee"></i><span>Inventory value</span><strong>Rs {{ total_value|floatformat:0 }}</strong></div>
+    </div>
+    <div class="row g-4 mb-4">
+      <div class="col-xl-8"><div class="pv-card p-4 reveal" style="height:360px"><h2 class="h4 fw-bold">User registrations — last 6 months</h2>{% if user_growth_labels %}<canvas class="dashboard-chart" data-labels='[{% for l in user_growth_labels %}"{{ l }}"{% if not forloop.last %},{% endif %}{% endfor %}]' data-values='[{% for v in user_growth_values %}{{ v }}{% if not forloop.last %},{% endif %}{% endfor %}]'></canvas>{% else %}<div class="pv-muted text-center pt-5"><i class="bi bi-bar-chart fs-1 d-block mb-2"></i>No registration data yet.</div>{% endif %}</div></div>
+      <div class="col-xl-4"><div class="pv-card p-4 reveal" style="height:360px"><h2 class="h4 fw-bold">City distribution</h2><canvas class="dashboard-chart" data-type="doughnut" data-labels='[{% for city in top_cities %}"{{ city.city }}"{% if not forloop.last %},{% endif %}{% endfor %}]' data-values='[{% for city in top_cities %}{{ city.total }}{% if not forloop.last %},{% endif %}{% endfor %}]'></canvas></div></div>
+    </div>
+    <div class="row g-4">
+      <div class="col-xl-7"><div class="pv-card p-4 reveal"><h2 class="h4 fw-bold">Property approval queue</h2>{% for property in pending_properties %}<div class="activity"><span>{{ property.title }}</span><form action="{% url 'properties:approve' property.slug %}" method="post" class="d-inline">{% csrf_token %}<button type="submit" class="pv-btn pv-btn-ghost py-1 px-3" style="min-height: 36px;">Approve</button></form></div>{% empty %}<p class="pv-muted">No pending approvals.</p>{% endfor %}</div></div>
+      <div class="col-xl-5">
+        <div class="pv-card p-4 reveal">
+          <h2 class="h4 fw-bold mb-3"><i class="bi bi-clock-history text-primary"></i> System Audit Timeline</h2>
+          <div class="vstack gap-2" style="max-height: 300px; overflow-y: auto;">
+            {% for log in recent_audit %}
+              <div class="activity {% if forloop.last %}border-0 pb-0{% endif %}">
+                <div>
+                  <strong>{{ log.action }}</strong>
+                  <div class="pv-muted small">Actor: {{ log.actor.username|default:"System" }} | Type: {{ log.object_type|title }}</div>
+                </div>
+                <span class="text-secondary small">{{ log.created_at|timesince }} ago</span>
+              </div>
+            {% empty %}
+              <p class="pv-muted text-center py-4">No system activity logged yet.</p>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

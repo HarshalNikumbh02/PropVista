@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Notifications | PropVista{% endblock %}
+{% block content %}
+<section class="dashboard-shell">
+  {% include "partials/sidebar.html" %}
+  <div class="dashboard-main notifications-main">
+    <div class="notifications-container">
+      <!-- Page-hero style header matching /properties/ -->
+      <div class="notifications-header mb-5">
+        <span class="pv-eyebrow reveal"><i class="bi bi-bell"></i> Inbox</span>
+        <h1 class="pv-serif display-3 workspace-page-title fw-bold mt-3 mb-3 reveal">Notifications</h1>
+        <p class="pv-muted fs-5 workspace-page-subtitle mb-4 reveal">{{ unread_count }} unread of {{ notifications|length }} recent alerts.</p>
+        {% if notifications %}
+        <form method="post" action="{% url 'notifications:mark_all_read' %}" class="m-0 d-inline-block">{%csrf_token%}
+          <button class="pv-btn pv-btn-ghost btn-sm py-2 px-4" type="submit"><i class="bi bi-check2-all"></i> Mark all read</button>
+        </form>
+        {% endif %}
+      </div>
+      
+      <!-- Notification Cards List -->
+      <div class="row g-4 notifications-list">
+        {% for n in notifications %}
+          <div class="col-12">
+            <div class="pv-card d-flex align-items-start gap-4 {% if not n.is_read %}border-primary shadow-sm{% endif %} transition-all hover-lift" style="padding: 28px !important; border-radius: 18px !important; border-left: 4px solid {% if n.category == 'inquiry' %}#2563eb{% elif n.category == 'visit' %}#0dcaf0{% elif n.category == 'favorite' %}#f43f5e{% elif n.category == 'lead' %}#7c3aed{% elif n.category == 'approval' and n.level == 'success' %}#16a34a{% elif n.category == 'approval' %}#eab308{% elif n.category == 'profile' %}#f97316{% else %}#6b7280{% endif %};">
+              <span class="d-flex align-items-center justify-content-center flex-shrink-0" style="width: 44px; height: 44px; border-radius: 12px;
+                {% if n.category == 'inquiry' %}background: rgba(37,99,235,0.1); color: rgb(37,99,235);
+                {% elif n.category == 'visit' %}background: rgba(13,202,240,0.1); color: rgb(13,202,240);
+                {% elif n.category == 'favorite' %}background: rgba(244,63,94,0.1); color: rgb(244,63,94);
+                {% elif n.category == 'lead' %}background: rgba(124,58,237,0.1); color: rgb(124,58,237);
+                {% elif n.category == 'approval' and n.level == 'success' %}background: rgba(22,163,74,0.1); color: rgb(22,163,74);
+                {% elif n.category == 'approval' %}background: rgba(234,179,8,0.1); color: rgb(234,179,8);
+                {% elif n.category == 'profile' %}background: rgba(249,115,22,0.1); color: rgb(249,115,22);
+                {% else %}background: rgba(107,114,128,0.1); color: rgb(107,114,128);{% endif %}
+              ">
+                {% if n.category == 'inquiry' %}<i class="bi bi-chat-left-text-fill fs-5"></i>
+                {% elif n.category == 'visit' %}<i class="bi bi-calendar2-check-fill fs-5"></i>
+                {% elif n.category == 'favorite' %}<i class="bi bi-heart-fill fs-5"></i>
+                {% elif n.category == 'lead' %}<i class="bi bi-kanban-fill fs-5"></i>
+                {% elif n.category == 'approval' and n.level == 'success' %}<i class="bi bi-shield-fill-check fs-5"></i>
+                {% elif n.category == 'approval' %}<i class="bi bi-shield-fill-exclamation fs-5"></i>
+                {% elif n.category == 'profile' %}<i class="bi bi-person-badge-fill fs-5"></i>
+                {% elif n.category == 'search' %}<i class="bi bi-search fs-5"></i>
+                {% else %}<i class="bi bi-bell-fill fs-5"></i>{% endif %}
+              </span>
+              <div class="flex-grow-1">
+                <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-start gap-1 gap-sm-3 mb-1">
+                  <strong class="text-dark">{{ n.title }}</strong>
+                  <small class="pv-muted text-nowrap flex-shrink-0 font-monospace" style="font-size: 0.75rem;">{{ n.created_at|timesince }} ago</small>
+                </div>
+                {% if n.body %}<p class="pv-muted mb-2 small">{{ n.body }}</p>{% endif %}
+                <div class="d-flex gap-2">
+                  {% if n.link %}<a class="pv-btn pv-btn-ghost btn-sm py-1 px-3" href="{{ n.link }}"><i class="bi bi-eye"></i> View</a>{% endif %}
+                  {% if not n.is_read %}
+                    <form method="post" action="{% url 'notifications:mark_read' n.pk %}">{% csrf_token %}
+                      <button class="pv-btn pv-btn-ghost btn-sm py-1 px-3" type="submit"><i class="bi bi-check2"></i> Mark read</button>
+                    </form>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+        {% empty %}
+          <div class="col-12"><div class="pv-card p-4 text-center pv-muted">You are all caught up.</div></div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

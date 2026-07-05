@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Buyer Dashboard | PropVista{% endblock %}
+{% block content %}
+<section class="dashboard-shell">
+  {% include "partials/sidebar.html" %}
+  <div class="dashboard-main">
+    <div class="dashboard-hero reveal mb-4">
+      <span class="pv-eyebrow bg-white text-primary"><i class="bi bi-house-check"></i> Buyer workspace</span>
+      <h1 class="pv-serif display-5 mt-3">Good {{ greeting }}, {{ user.first_name|default:user.username }}</h1>
+      <p class="pv-muted fs-5 mb-4">You have {{ inquiries_count }} active {{ inquiries_count|pluralize:"inquiry,inquiries" }} and {{ favorites_count }} saved {{ favorites_count|pluralize:"property,properties" }}.</p>
+      <a class="pv-btn pv-btn-ghost" href="{% url 'properties:list' %}"><i class="bi bi-search"></i> Search properties</a>
+    </div>
+    <div class="kpi-grid mb-4">
+      <div class="kpi-card pv-card reveal"><i class="bi bi-bookmark"></i><span>Saved properties</span><strong data-counter="{{ favorites_count }}">0</strong></div>
+      <div class="kpi-card pv-card reveal"><i class="bi bi-chat-left-text"></i><span>Active inquiries</span><strong data-counter="{{ inquiries_count }}">0</strong></div>
+      <div class="kpi-card pv-card reveal"><i class="bi bi-calendar2-check"></i><span>Scheduled visits</span><strong data-counter="{{ visits_count }}">0</strong></div>
+      <div class="kpi-card pv-card reveal"><i class="bi bi-hand-thumbs-up"></i><span>Curated Matches</span><strong data-counter="{{ recommendations_count }}">0</strong></div>
+    </div>
+    <div class="row g-4">
+      <div class="col-xl-8">
+        <div class="pv-card p-4 reveal">
+          <div class="d-flex justify-content-between align-items-center mb-3"><h2 class="h4 fw-bold mb-0">Recommended homes for you</h2><a class="pv-muted" href="{% url 'properties:list' %}">View all <i class="bi bi-arrow-right"></i></a></div>
+          <div class="row g-4">
+            {% for property in recommendations %}
+              <div class="col-md-6">{% include "partials/property_card.html" %}</div>
+            {% empty %}
+              <p class="pv-muted">Update your profile city to improve recommendations.</p>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      <div class="col-xl-4">
+        <div class="pv-card p-4 reveal mb-4">
+          <h2 class="h4 fw-bold">Activity timeline</h2>
+          {% for inquiry in inquiries %}
+            <div class="activity"><div><strong>{{ inquiry.property.title }}</strong><div class="pv-muted small">Inquiry {{ inquiry.status }}</div></div><span>{{ inquiry.created_at|date:"M d" }}</span></div>
+          {% empty %}<p class="pv-muted">No inquiries yet.</p>{% endfor %}
+        </div>
+        <div class="pv-card p-4 reveal">
+          <h2 class="h4 fw-bold">Quick actions</h2>
+          <a class="activity text-decoration-none text-reset" href="{% url 'properties:list' %}"><span><i class="bi bi-search me-2 text-primary"></i>Browse all properties</span><i class="bi bi-arrow-right text-muted"></i></a>
+          <a class="activity text-decoration-none text-reset" href="{% url 'favorites:wishlist' %}"><span><i class="bi bi-heart me-2 text-danger"></i>Saved properties</span><i class="bi bi-arrow-right text-muted"></i></a>
+          <a class="activity border-0 text-decoration-none text-reset" href="{% url 'inquiries:list' %}"><span><i class="bi bi-chat-left me-2 text-info"></i>My inquiries</span><i class="bi bi-arrow-right text-muted"></i></a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+

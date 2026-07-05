@@ -1,0 +1,914 @@
+{% extends "base.html" %}
+{% block title %}Property Details | {{ property.title }} | PropVista{% endblock %}
+{% block content %}
+<section class="detail-showcase py-4">
+  <div class="container-fluid px-3 px-md-4" style="max-width: 1400px; margin: 0 auto;">
+    <!-- Breadcrumb & Title Section -->
+    <div class="mb-4 reveal">
+      <a class="pv-muted text-decoration-none small" href="{% url 'properties:list' %}">
+        <i class="bi bi-arrow-left"></i> Back to properties
+      </a>
+      <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 mt-3">
+        <div>
+          <h1 class="pv-serif display-5 fw-bold mt-2 mb-2">
+            {{ property.title }}
+            {% if property.status == 'sold' %}
+              <span class="badge bg-danger text-white fs-5 align-middle ms-2"><i class="bi bi-tag-fill"></i> SOLD</span>
+            {% elif property.status == 'closed' %}
+              <span class="badge bg-secondary text-white fs-5 align-middle ms-2"><i class="bi bi-x-circle-fill"></i> CLOSED</span>
+            {% endif %}
+          </h1>
+          <p class="pv-muted fs-5"><i class="bi bi-geo-alt"></i> {{ property.address }}, {{ property.locality }}, {{ property.city }}</p>
+        </div>
+        <div class="d-flex gap-2 align-items-start">
+          <a class="pv-btn pv-btn-ghost {% if property.id in saved_property_ids %}active{% endif %}" href="{% url 'favorites:toggle' property.slug %}">
+            {% if property.id in saved_property_ids %}
+              <i class="bi bi-heart-fill text-danger animate-pulse"></i> Saved
+            {% else %}
+              <i class="bi bi-heart"></i> Save
+            {% endif %}
+          </a>
+          <button class="pv-btn pv-btn-ghost" id="share-btn" onclick="shareProperty()" type="button"><i class="bi bi-share"></i> Share</button>
+        </div>
+      </div>
+    </div>
+
+    {% if request.user.is_authenticated and request.user == property.created_by or request.user.is_admin_role %}
+      <!-- Listing Performance Analytics for Owner/Admin -->
+      <div class="pv-card p-4 mb-4 reveal" style="border-left: 5px solid var(--pv-primary); border-radius: 16px;">
+        <div class="d-flex align-items-center gap-2 mb-3">
+          <i class="bi bi-graph-up-arrow text-primary fs-5"></i>
+          <h3 class="h5 fw-bold mb-0">Listing Performance Analytics <span class="badge bg-secondary-subtle text-secondary ms-2 small">Visible only to you</span></h3>
+        </div>
+        <div class="row g-3">
+          <div class="col-6 col-md-3">
+            <div class="p-3 bg-light rounded-3 text-center">
+              <span class="small text-muted d-block mb-1">Total Views</span>
+              <strong class="fs-4 text-primary"><i class="bi bi-eye me-1"></i>{{ analytics.views }}</strong>
+            </div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="p-3 bg-light rounded-3 text-center">
+              <span class="small text-muted d-block mb-1">Favorites</span>
+              <strong class="fs-4 text-danger"><i class="bi bi-heart me-1"></i>{{ analytics.favorites }}</strong>
+            </div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="p-3 bg-light rounded-3 text-center">
+              <span class="small text-muted d-block mb-1">Inquiries</span>
+              <strong class="fs-4 text-warning"><i class="bi bi-chat-dots me-1"></i>{{ analytics.inquiries }}</strong>
+            </div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="p-3 bg-light rounded-3 text-center">
+              <span class="small text-muted d-block mb-1">Conversion %</span>
+              <strong class="fs-4 text-info"><i class="bi bi-percent me-1"></i>{{ analytics.conversion }}%</strong>
+            </div>
+          </div>
+        </div>
+        
+        <hr class="my-4">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+          <div>
+            <strong class="d-block mb-1">Property Status: <span class="badge bg-primary text-uppercase">{{ property.status }}</span></strong>
+            <span class="small text-secondary">Manage listing transitions and state.</span>
+          </div>
+          <div class="d-flex flex-wrap gap-2">
+            <!-- Edit / Delete -->
+            <a href="{% url 'properties:update' property.slug %}" class="pv-btn pv-btn-ghost py-2"><i class="bi bi-pencil"></i> Edit Listing</a>
+            
+            <!-- Draft -> Pending -->
+            {% if property.status == 'draft' %}
+              <form action="{% url 'properties:submit' property.slug %}" method="post" class="d-inline">{% csrf_token %}
+                <button type="submit" class="pv-btn pv-btn-primary py-2"><i class="bi bi-send"></i> Submit for Approval</button>
+              </form>
+            {% endif %}
+            
+            <!-- Admin approval / rejection -->
+            {% if request.user.is_admin_role and property.status == 'pending' %}
+              <form action="{% url 'properties:approve' property.slug %}" method="post" class="d-inline">{% csrf_token %}
+                <button type="submit" class="pv-btn pv-btn-primary py-2"><i class="bi bi-check2-circle"></i> Approve Property</button>
+              </form>
+              <button type="button" class="pv-btn pv-btn-ghost text-danger py-2" data-bs-toggle="collapse" data-bs-target="#rejectReasonCollapse"><i class="bi bi-x-circle"></i> Reject Property</button>
+            {% endif %}
+            
+            <!-- Approved -> Active -->
+            {% if property.status == 'approved' %}
+              <form action="{% url 'properties:activate' property.slug %}" method="post" class="d-inline">{% csrf_token %}
+                <button type="submit" class="pv-btn pv-btn-primary py-2 bg-success border-success text-white"><i class="bi bi-play-fill"></i> Activate Property</button>
+              </form>
+            {% endif %}
+            
+            <!-- Active -> Sold / Closed -->
+            {% if property.status == 'active' %}
+              <form action="{% url 'properties:mark_sold' property.slug %}" method="post" class="d-inline">{% csrf_token %}
+                <button type="submit" class="pv-btn pv-btn-primary py-2 bg-danger border-danger text-white"><i class="bi bi-tag-fill"></i> Mark as SOLD</button>
+              </form>
+              <form action="{% url 'properties:mark_closed' property.slug %}" method="post" class="d-inline">{% csrf_token %}
+                <button type="submit" class="pv-btn pv-btn-ghost text-secondary py-2"><i class="bi bi-x-circle"></i> Mark as Closed</button>
+              </form>
+            {% endif %}
+            
+            <!-- Closed -> Reopen -->
+            {% if property.status == 'closed' %}
+              <form action="{% url 'properties:reopen' property.slug %}" method="post" class="d-inline">{% csrf_token %}
+                <button type="submit" class="pv-btn pv-btn-primary py-2 bg-success border-success text-white"><i class="bi bi-arrow-counterclockwise"></i> Reopen Property</button>
+              </form>
+            {% endif %}
+          </div>
+        </div>
+
+        {% if request.user.is_admin_role and property.status == 'pending' %}
+          <div class="collapse mt-3" id="rejectReasonCollapse">
+            <form action="{% url 'properties:reject' property.slug %}" method="post" class="card card-body">
+              {% csrf_token %}
+              <div class="mb-3">
+                <label for="rejectReason" class="form-label fw-bold">Rejection Reason</label>
+                <textarea class="form-control" id="rejectReason" name="reason" rows="3" required placeholder="Please enter a reason for rejecting this property."></textarea>
+              </div>
+              <button type="submit" class="pv-btn pv-btn-primary py-2 bg-danger border-danger text-white w-100">Submit Rejection</button>
+            </form>
+          </div>
+        {% endif %}
+      </div>
+    {% endif %}
+
+    <!-- Top Row: Gallery & Details (Left) + Sidebar (Right) -->
+    <div class="detail-grid-row">
+      <!-- Left Column (Gallery, Narrative, Lifecycle) -->
+      <div class="detail-left-col">
+        
+        <!-- Gallery Section -->
+        <div class="detail-gallery-premium grid-left-gallery reveal" style="margin-bottom: 0;">
+          <div class="row g-2">
+            <div class="col-12 {% if property.images.exists %}col-md-8{% endif %}">
+              <div class="gallery-main-container pv-card overflow-hidden" style="border-radius: 24px; position: relative;">
+                <div id="propertyGalleryCarousel" class="carousel slide h-100" data-bs-ride="carousel">
+                  <div class="carousel-inner h-100">
+                    {% if property.cover_image %}
+                      <div class="carousel-item active h-100">
+                        <img src="{{ property.cover_image.url }}" class="d-block w-100 h-100 object-fit-cover" alt="{{ property.title }}" onload="this.classList.add('is-loaded')">
+                        <div class="carousel-caption d-none d-md-block bg-dark bg-opacity-25 rounded-pill py-1 px-3 mb-3" style="width: fit-content; margin: 0 auto;">
+                          <span class="small fw-bold">Cover Photo</span>
+                        </div>
+                      </div>
+                    {% else %}
+                      <div class="carousel-item active h-100">
+                        <img src="{{ property.display_image_url }}" class="d-block w-100 h-100 object-fit-cover" alt="{{ property.title }}" onload="this.classList.add('is-loaded')">
+                        <div class="carousel-caption d-none d-md-block bg-dark bg-opacity-25 rounded-pill py-1 px-3 mb-3" style="width: fit-content; margin: 0 auto;">
+                          <span class="small fw-bold">Cover Photo</span>
+                        </div>
+                      </div>
+                    {% endif %}
+                    {% for image in property.images.all %}
+                      <div class="carousel-item {% if not property.cover_image and forloop.first %}active{% endif %} h-100">
+                        <img src="{{ image.image.url }}" class="d-block w-100 h-100 object-fit-cover" alt="{{ image.caption|default:property.title }}" onload="this.classList.add('is-loaded')">
+                        {% if image.caption %}
+                          <div class="carousel-caption d-none d-md-block bg-dark bg-opacity-25 rounded-pill py-1 px-3 mb-3" style="width: fit-content; margin: 0 auto;">
+                            <span class="small fw-bold">{{ image.caption }}</span>
+                          </div>
+                        {% endif %}
+                      </div>
+                    {% endfor %}
+                  </div>
+                  {% if show_gallery_controls %}
+                    <!-- Premium Glass Control Bar -->
+                    <div class="gallery-glass-control-bar">
+                      <button class="gallery-control-btn prev-btn" type="button" data-bs-target="#propertyGalleryCarousel" data-bs-slide="prev" aria-label="Previous photo" id="gallery-prev-btn">
+                        <i class="bi bi-arrow-left"></i> <span>Previous Photo</span>
+                      </button>
+                      <span class="gallery-photo-counter" id="gallery-counter" aria-live="polite">Photo 1 of 1</span>
+                      <button class="gallery-control-btn next-btn" type="button" data-bs-target="#propertyGalleryCarousel" data-bs-slide="next" aria-label="Next photo" id="gallery-next-btn">
+                        <span>Next Photo</span> <i class="bi bi-arrow-right"></i>
+                      </button>
+                    </div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+            {% if property.images.exists %}
+            <div class="col-md-4 d-none d-md-flex flex-column" style="gap: 8px;">
+              {% for image in property.images.all|slice:":2" %}
+                <div class="gallery-tile-container pv-card overflow-hidden" style="border-radius: 16px; cursor: pointer; flex: 1 1 0;" onclick="bootstrap.Carousel.getOrCreateInstance(document.getElementById('propertyGalleryCarousel')).to({% if property.cover_image %}{{ forloop.counter }}{% else %}{{ forloop.counter0 }}{% endif %})">
+                  <img src="{{ image.image.url }}" class="w-100 h-100 object-fit-cover" alt="{{ image.caption|default:property.title }}" onload="this.classList.add('is-loaded')">
+                </div>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Narrative Section -->
+        <div class="pv-card grid-left-narrative p-4 p-lg-5 reveal">
+          <div class="row g-3 mb-4">
+            <div class="col-6 col-md-3"><div class="stat-mini text-center"><strong>{{ property.bedrooms }}</strong><span>Bedrooms</span></div></div>
+            <div class="col-6 col-md-3"><div class="stat-mini text-center"><strong>{{ property.bathrooms }}</strong><span>Bathrooms</span></div></div>
+            <div class="col-6 col-md-3"><div class="stat-mini text-center"><strong>{{ property.area_sqft }}</strong><span>Sqft Size</span></div></div>
+            <div class="col-6 col-md-3"><div class="stat-mini text-center"><strong>{{ property.parking }}</strong><span>Parking</span></div></div>
+          </div>
+          
+          <h2 class="pv-serif detail-section-heading"><i class="bi bi-text-left text-primary"></i> Property narrative</h2>
+          <p class="fs-5 pv-muted lh-lg mb-0" style="white-space: pre-line;">{{ property.description }}</p>
+        </div>
+
+        <!-- Lifecycle & Highlights Section -->
+        <div class="pv-card grid-left-lifecycle p-4 p-lg-5 mt-4 reveal">
+          <h2 class="pv-serif detail-section-heading mb-4"><i class="bi bi-clock-history text-primary"></i> Listing Lifecycle</h2>
+          <div class="timeline-steps d-flex justify-content-between position-relative mb-5 mt-4">
+            <div class="timeline-line position-absolute top-50 start-0 end-0 bg-light" style="height: 2px; z-index: 0; transform: translateY(-50%);"></div>
+            
+            <!-- Draft -->
+            <div class="timeline-step text-center position-relative" style="z-index: 1; width: 20%;">
+              <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center mx-auto mb-2" style="width: 32px; height: 32px;"><i class="bi bi-file-earmark-plus"></i></div>
+              <div class="small fw-bold">Draft</div>
+              <div class="text-muted" style="font-size: 0.65rem;">{{ property.created_at|date:"M d, Y" }}</div>
+            </div>
+            
+            <!-- Pending -->
+            <div class="timeline-step text-center position-relative" style="z-index: 1; width: 20%;">
+              <div class="rounded-circle {% if property.status != 'draft' %}bg-primary text-white{% else %}bg-light text-muted{% endif %} d-flex align-items-center justify-content-center mx-auto mb-2" style="width: 32px; height: 32px;"><i class="bi bi-hourglass-split"></i></div>
+              <div class="small fw-bold">Pending</div>
+              {% if property.status != 'draft' %}
+                <div class="text-muted" style="font-size: 0.65rem;">Submitted</div>
+              {% endif %}
+            </div>
+            
+            <!-- Approved -->
+            <div class="timeline-step text-center position-relative" style="z-index: 1; width: 20%;">
+              <div class="rounded-circle {% if property.status in 'approved,active,sold,closed' %}bg-primary text-white{% else %}bg-light text-muted{% endif %} d-flex align-items-center justify-content-center mx-auto mb-2" style="width: 32px; height: 32px;"><i class="bi bi-shield-check"></i></div>
+              <div class="small fw-bold">Approved</div>
+              {% if property.status in 'approved,active,sold,closed' %}
+                <div class="text-muted" style="font-size: 0.65rem;">Approved</div>
+              {% endif %}
+            </div>
+            
+            <!-- Active -->
+            <div class="timeline-step text-center position-relative" style="z-index: 1; width: 20%;">
+              <div class="rounded-circle {% if property.status in 'active,sold,closed' %}bg-success text-white{% else %}bg-light text-muted{% endif %} d-flex align-items-center justify-content-center mx-auto mb-2" style="width: 32px; height: 32px;"><i class="bi bi-globe"></i></div>
+              <div class="small fw-bold">Active</div>
+              {% if property.status in 'active,sold,closed' %}
+                <div class="text-muted" style="font-size: 0.65rem;">Live</div>
+              {% endif %}
+            </div>
+            
+            <!-- Sold -->
+            <div class="timeline-step text-center position-relative" style="z-index: 1; width: 20%;">
+              <div class="rounded-circle {% if property.status == 'sold' %}bg-danger text-white{% else %}bg-light text-muted{% endif %} d-flex align-items-center justify-content-center mx-auto mb-2" style="width: 32px; height: 32px;"><i class="bi bi-tag-fill"></i></div>
+              <div class="small fw-bold">Sold</div>
+              {% if property.status == 'sold' and property.sold_date %}
+                <div class="text-danger fw-bold" style="font-size: 0.65rem;">{{ property.sold_date|date:"M d, Y" }}</div>
+              {% endif %}
+            </div>
+          </div>
+          
+          <h2 class="pv-serif detail-section-heading mb-4 mt-5"><i class="bi bi-award text-primary"></i> Premium Highlights</h2>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <div class="d-flex align-items-center gap-3 p-3 bg-light bg-opacity-75 rounded-4 border">
+                <div class="rounded-circle p-2 bg-primary-subtle text-primary d-flex align-items-center justify-content-center" style="width: 44px; height: 44px;"><i class="bi bi-building"></i></div>
+                <div>
+                  <span class="small text-secondary d-block">Asset Class</span>
+                  <strong class="text-dark">{{ property.get_property_type_display|default:property.property_type|title }}</strong>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="d-flex align-items-center gap-3 p-3 bg-light bg-opacity-75 rounded-4 border">
+                <div class="rounded-circle p-2 bg-success-subtle text-success d-flex align-items-center justify-content-center" style="width: 44px; height: 44px;"><i class="bi bi-calendar-check"></i></div>
+                <div>
+                  <span class="small text-secondary d-block">Year Constructed</span>
+                  <strong class="text-dark">{{ property.year_built|default:"2024" }}</strong>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="d-flex align-items-center gap-3 p-3 bg-light bg-opacity-75 rounded-4 border">
+                <div class="rounded-circle p-2 bg-warning-subtle text-warning d-flex align-items-center justify-content-center" style="width: 44px; height: 44px;"><i class="bi bi-bounding-box-circles"></i></div>
+                <div>
+                  <span class="small text-secondary d-block">Area Size</span>
+                  <strong class="text-dark">{{ property.area_sqft }} Sqft</strong>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="d-flex align-items-center gap-3 p-3 bg-light bg-opacity-75 rounded-4 border">
+                <div class="rounded-circle p-2 bg-danger-subtle text-danger d-flex align-items-center justify-content-center" style="width: 44px; height: 44px;"><i class="bi bi-gem"></i></div>
+                <div>
+                  <span class="small text-secondary d-block">Furnishing Status</span>
+                  <strong class="text-dark">{{ property.furnishing|title }}</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Amenities Section -->
+        <div class="pv-card grid-left-amenities p-4 p-lg-5 reveal mt-4">
+          <h2 class="pv-serif detail-section-heading mb-4"><i class="bi bi-check2-square text-primary"></i> Amenities & Lifestyle</h2>
+          <div class="row g-3">
+            {% for amenity in property.amenities.all %}
+              <div class="col-md-6">
+                <div class="d-flex align-items-center gap-3 p-3 rounded-4 bg-light bg-opacity-50 border">
+                  <div class="rounded-circle p-2 bg-primary-subtle text-primary d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                    {% if amenity.name == 'Gym' %}<i class="bi bi-heart-pulse"></i>
+                    {% elif amenity.name == 'Pool' %}<i class="bi bi-water"></i>
+                    {% elif amenity.name == 'Security' %}<i class="bi bi-shield-lock"></i>
+                    {% elif amenity.name == 'Parking' %}<i class="bi bi-car-front"></i>
+                    {% elif amenity.name == 'Garden' %}<i class="bi bi-tree"></i>
+                    {% elif amenity.name == 'Clubhouse' %}<i class="bi bi-building"></i>
+                    {% elif amenity.name == 'Metro Nearby' %}<i class="bi bi-train-front"></i>
+                    {% elif amenity.name == 'Power Backend' %}<i class="bi bi-lightning-charge"></i>
+                    {% else %}<i class="bi bi-check-circle"></i>{% endif %}
+                  </div>
+                  <strong class="text-dark small">{{ amenity.name }}</strong>
+                </div>
+              </div>
+            {% empty %}
+              <div class="col-12">
+                <p class="pv-muted">No premium amenities specified.</p>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <!-- Location Intelligence Section -->
+        <div class="pv-card grid-left-location p-4 p-lg-5 mt-4 reveal">
+          <h2 class="pv-serif detail-section-heading mb-4"><i class="bi bi-geo-alt text-primary"></i> Location Intelligence</h2>
+          <p class="pv-muted fs-5 mb-4">Situated in the prime micro-market of <strong>{{ property.locality }}, {{ property.city }}</strong>, this property offers outstanding connectivity to commercial districts, premium transit channels, and essential healthcare facilities.</p>
+          
+          <h3 class="h5 fw-bold mb-3"><i class="bi bi-building-up text-secondary"></i> Nearby Facilities & Distances</h3>
+          <div class="row g-3 mb-4">
+            <div class="col-md-6 col-lg-3">
+              <div class="p-3 bg-light rounded-4 text-center border h-100">
+                <i class="bi bi-train-front text-primary fs-3 mb-2 d-block"></i>
+                <strong class="text-dark d-block">Metro Transit</strong>
+                <span class="small text-secondary">5 mins away (0.8 km)</span>
+              </div>
+            </div>
+            <div class="col-md-6 col-lg-3">
+              <div class="p-3 bg-light rounded-4 text-center border h-100">
+                <i class="bi bi-hospital text-danger fs-3 mb-2 d-block"></i>
+                <strong class="text-dark d-block">Healthcare</strong>
+                <span class="small text-secondary">10 mins away (2.4 km)</span>
+              </div>
+            </div>
+            <div class="col-md-6 col-lg-3">
+              <div class="p-3 bg-light rounded-4 text-center border h-100">
+                <i class="bi bi-mortarboard text-warning fs-3 mb-2 d-block"></i>
+                <strong class="text-dark d-block">Edu Hubs</strong>
+                <span class="small text-secondary">8 mins away (1.5 km)</span>
+              </div>
+            </div>
+            <div class="col-md-6 col-lg-3">
+              <div class="p-3 bg-light rounded-4 text-center border h-100">
+                <i class="bi bi-shop text-success fs-3 mb-2 d-block"></i>
+                <strong class="text-dark d-block">Shopping Plaza</strong>
+                <span class="small text-secondary">12 mins away (3.1 km)</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="map-panel pv-card mt-4">
+            <div id="detailMap"
+              data-title="{{ property.title|escapejs }}"
+              data-lat="{{ property.latitude|default:'19.0760' }}"
+              data-lng="{{ property.longitude|default:'72.8777' }}"
+              data-price="{{ property.price|floatformat:0 }}"
+              data-proptype="{{ property.property_type|title|escapejs }}"
+              data-locality="{{ property.locality|escapejs }}"
+              data-city="{{ property.city|escapejs }}"
+              {% if property.cover_image %}data-image="{{ property.cover_image.url }}"{% endif %}
+            ></div>
+          </div>
+
+          <!-- Location CTA -->
+          <div class="pv-card p-4 mt-4 text-center" id="location-cta" style="background: linear-gradient(135deg, rgba(11,33,91,0.04), rgba(37,99,235,0.06)); border: 1px solid rgba(37,99,235,0.15); border-radius: 16px;">
+            <i class="bi bi-geo-alt-fill text-primary fs-3 mb-2 d-block"></i>
+            <h4 class="fw-bold text-dark mb-1" style="font-size: 1.1rem;">Interested in this property?</h4>
+            <p class="pv-muted small mb-3">Connect with the seller to ask questions, request more details, or arrange a property visit.</p>
+            <div class="d-flex flex-wrap gap-2 justify-content-center">
+              <button type="button" class="pv-btn pv-btn-primary" onclick="scrollToInquiry()" id="btn-send-inquiry">
+                <i class="bi bi-envelope"></i> Send Inquiry
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Similar Opportunities Section -->
+        <div class="pv-card grid-left-similar p-4 p-lg-5 mt-4 reveal">
+          <h2 class="pv-serif detail-section-heading mb-4"><i class="bi bi-houses text-primary"></i> Similar Opportunities</h2>
+          <div class="row g-3">
+            {% for prop in similar %}
+              <div class="col-12 col-md-6">
+                <article class="property-card-premium h-100 d-flex flex-column" style="border-radius: 20px; overflow: hidden; border: 1px solid var(--pv-line); background: white; transition: all 0.3s ease; box-shadow: 0 10px 30px rgba(15,23,42,0.03);">
+                  <div class="property-media" style="height: 180px; position: relative; overflow: hidden;">
+                    <img src="{{ prop.display_image_url }}" class="w-100 h-100 object-fit-cover" alt="{{ prop.title }}" style="transition: transform 0.5s ease;" loading="lazy" onload="this.classList.add('is-loaded')">
+                    <div class="media-gradient" style="position: absolute; inset: 0; background: linear-gradient(180deg, transparent 60%, rgba(0,0,0,0.6) 100%);"></div>
+                    <span class="property-badge" style="position: absolute; top: 12px; left: 12px; background: rgba(15,23,42,0.85); color: white; padding: 4px 8px; border-radius: 6px; font-size: 0.75rem;"><i class="bi bi-patch-check-fill text-primary"></i> Verified</span>
+                  </div>
+                  <div class="property-card-body p-3 flex-grow-1 d-flex flex-column justify-content-between">
+                    <div>
+                      <div class="property-price fs-5 fw-bold text-primary mb-1">{{ prop.formatted_price }}</div>
+                      <h3 class="h6 fw-bold mb-1 text-dark" style="display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;">{{ prop.title }}</h3>
+                      <div class="pv-muted small mb-2"><i class="bi bi-geo-alt me-1"></i>{{ prop.locality }}, {{ prop.city }}</div>
+                    </div>
+                    <a class="pv-btn pv-btn-primary w-100 text-center py-2 mt-2" href="{% url 'properties:detail' prop.slug %}" style="font-size: 0.8rem;">View Details</a>
+                  </div>
+                </article>
+              </div>
+            {% empty %}
+              <div class="col-12 text-center py-4">
+                <div class="pv-muted mb-3"><i class="bi bi-search" style="font-size: 2rem;"></i></div>
+                <p class="pv-muted">No similar properties in {{ property.city }} at the moment.</p>
+                <a class="pv-btn pv-btn-ghost" href="{% url 'properties:list' %}">Explore all cities</a>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <!-- AI Property Insights (Phase 7) -->
+        {% if user.is_authenticated %}
+        <div class="pv-card grid-left-ai-insights p-4 p-lg-5 mt-4 reveal" id="ai-insights-section">
+          <div class="d-flex align-items-center gap-3 mb-4">
+            <div class="rounded-circle bg-primary-subtle text-primary d-flex align-items-center justify-content-center" style="width: 32px; height: 32px; flex-shrink: 0;">
+              <i class="bi bi-stars" style="font-size: 0.85rem;"></i>
+            </div>
+            <div>
+              <h2 class="pv-serif detail-section-heading mb-0">AI Property Insights</h2>
+              <span class="small pv-muted d-block mt-1">AI-generated insights based on property characteristics, market signals, and available listing data.</span>
+            </div>
+          </div>
+
+          <!-- AI Insights Loading Skeleton (Phase 1) -->
+          <div id="ai-insights-loading" class="py-4">
+            <div class="placeholder-glow">
+              <div class="row g-3 mb-4">
+                <div class="col-sm-6"><div class="placeholder rounded-4 w-100" style="height: 80px; background-color: #e2e8f0;"></div></div>
+                <div class="col-sm-6"><div class="placeholder rounded-4 w-100" style="height: 80px; background-color: #e2e8f0;"></div></div>
+              </div>
+              <div class="placeholder rounded-2 w-75 mb-3" style="height: 24px; background-color: #e2e8f0;"></div>
+              <div class="placeholder rounded-2 w-100 mb-2" style="height: 18px; background-color: #e2e8f0;"></div>
+              <div class="placeholder rounded-2 w-100 mb-2" style="height: 18px; background-color: #e2e8f0;"></div>
+              <div class="placeholder rounded-2 w-50 mb-4" style="height: 18px; background-color: #e2e8f0;"></div>
+              <div class="row g-4 mb-4">
+                <div class="col-md-6"><div class="placeholder rounded-4 w-100" style="height: 120px; background-color: #e2e8f0;"></div></div>
+                <div class="col-md-6"><div class="placeholder rounded-4 w-100" style="height: 120px; background-color: #e2e8f0;"></div></div>
+              </div>
+            </div>
+            <div class="text-center mt-3">
+              <span class="pv-muted small"><i class="bi bi-stars animate-pulse"></i> Computing property intelligence assessment…</span>
+            </div>
+          </div>
+
+          <div id="ai-insights-content" style="display: none;">
+            <!-- Score & Market Position Badge Header Row -->
+            <div class="row g-3 mb-4">
+              <div class="col-sm-6">
+                <div class="p-3 bg-primary-subtle rounded-4 text-center">
+                  <span class="d-block small text-primary fw-bold text-uppercase mb-1" style="letter-spacing: 0.05em;">Investment Score</span>
+                  <div class="d-flex align-items-baseline justify-content-center gap-1">
+                    <span id="ai-score" class="fw-black text-primary display-6">—</span>
+                    <span class="text-secondary small">/10</span>
+                  </div>
+                </div>
+              </div>
+              <div class="col-sm-6">
+                <div class="p-3 bg-info-subtle rounded-4 text-center">
+                  <span class="d-block small text-info-emphasis fw-bold text-uppercase mb-1" style="letter-spacing: 0.05em;">Market Position</span>
+                  <div class="d-flex align-items-baseline justify-content-center mt-2">
+                    <span id="ai-market-position" class="badge bg-info text-info-emphasis px-3 py-2 fs-6 rounded-pill">—</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Key Strengths Section -->
+            <div class="mb-4">
+              <h4 class="h5 fw-bold text-success border-bottom pb-2 mb-3"><i class="bi bi-check-circle-fill me-2"></i>Key Strengths</h4>
+              <ul id="ai-strengths" class="list-unstyled vstack gap-2 ps-2" style="font-size: 0.9rem;"></ul>
+            </div>
+
+            <!-- Market Outlook & Buyer Suitability Grid -->
+            <div class="row g-4 mb-4">
+              <!-- Market Outlook -->
+              <div class="col-md-6">
+                <div class="p-3 bg-light rounded-4 border h-100">
+                  <h4 class="h6 fw-bold text-dark mb-3"><i class="bi bi-graph-up-arrow me-2 text-primary"></i>Market Outlook</h4>
+                  <div class="mb-2">
+                    <span class="d-block small text-muted">Short Term:</span>
+                    <span id="ai-outlook-short" class="fw-semibold text-dark small">—</span>
+                  </div>
+                  <div>
+                    <span class="d-block small text-muted">Long Term:</span>
+                    <span id="ai-outlook-long" class="fw-semibold text-dark small">—</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Buyer Suitability -->
+              <div class="col-md-6">
+                <div class="p-3 bg-light rounded-4 border h-100">
+                  <h4 class="h6 fw-bold text-dark mb-3"><i class="bi bi-people-fill me-2 text-primary"></i>Buyer Suitability</h4>
+                  <div class="mb-2">
+                    <span class="d-block small text-success fw-bold mb-1">Best For:</span>
+                    <ul id="ai-suitability-best" class="list-unstyled mb-0 ps-1" style="font-size: 0.85rem;"></ul>
+                  </div>
+                  <div>
+                    <span class="d-block small text-danger fw-bold mb-1">Less Suitable For:</span>
+                    <ul id="ai-suitability-less" class="list-unstyled mb-0 ps-1" style="font-size: 0.85rem;"></ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Considerations Section -->
+            <div>
+              <h4 class="h5 fw-bold text-warning border-bottom pb-2 mb-3"><i class="bi bi-exclamation-triangle-fill me-2"></i>Considerations</h4>
+              <ul id="ai-considerations" class="list-unstyled vstack gap-2 ps-2" style="font-size: 0.9rem;"></ul>
+            </div>
+            <p id="ai-fallback-note" class="pv-muted small mt-3" style="display: none;"><i class="bi bi-info-circle me-1"></i>Insights are based on available property data.</p>
+          </div>
+          <div id="ai-insights-error" style="display: none;" class="pv-muted text-center py-3 small">
+            <i class="bi bi-exclamation-triangle me-1"></i> Unable to generate insights. Please try again.
+          </div>
+        </div>
+        {% endif %}
+
+      </div>
+
+      <!-- Right Column (Sidebar widgets) -->
+      <div class="detail-right-col">
+        <aside class="detail-sidebar grid-right-sidebar" style="overflow: visible !important;">
+          <!-- ONE Parent Sidebar Card -->
+          <div class="pv-card sidebar-parent-card p-4 shadow-sm" style="border-radius: 24px; border: 1px solid var(--pv-line); background: #f8fafc; display: flex; flex-direction: column; gap: 24px;">
+            <!-- Price, Actions & Overview Card -->
+            <div class="pv-card p-4 shadow-sm" style="border-radius: 20px; border: 1px solid var(--pv-line); background: white;">
+              <div class="detail-price text-dark fw-bold fs-2 mb-2">
+                {{ property.formatted_price }}
+                {% if property.status == 'sold' %}
+                  <span class="badge bg-danger text-white fs-6 align-middle ms-2"><i class="bi bi-tag-fill"></i> SOLD</span>
+                {% elif property.status == 'closed' %}
+                  <span class="badge bg-secondary text-white fs-6 align-middle ms-2"><i class="bi bi-x-circle-fill"></i> CLOSED</span>
+                {% else %}
+                  <span class="badge bg-success text-white fs-6 align-middle ms-2"><i class="bi bi-check-circle-fill"></i> ACTIVE</span>
+                {% endif %}
+              </div>
+              <div class="pv-muted mb-3">{{ property.property_type|title }} · {{ property.furnishing }}</div>
+              <div class="d-flex flex-wrap gap-2 mb-0">
+                <span class="chip bg-light py-1.5 px-3 rounded-pill text-dark small"><i class="bi bi-calendar2"></i> Built {{ property.year_built|default:"2024" }}</span>
+                <span class="chip bg-light py-1.5 px-3 rounded-pill text-dark small"><i class="bi bi-shield-check"></i> {{ property.approval_status|title }}</span>
+              </div>
+            </div>
+
+            <!-- Inquiry Form Card -->
+            <div class="pv-card grid-sidebar-inquiry p-4 shadow-sm" id="inquiry-form-card" style="border-radius: 20px; border: 1px solid var(--pv-line); background: white;">
+              <h3 class="h5 fw-bold text-dark mb-3"><i class="bi bi-envelope-open text-primary"></i> Interested in this property?</h3>
+              
+              {% if property.status == 'sold' or property.status == 'closed' %}
+                <div class="alert alert-warning p-3 rounded-3 text-center mb-0" role="alert">
+                  <i class="bi bi-info-circle-fill me-2"></i>
+                  This property is <strong>{{ property.status|upper }}</strong>. Inquiries are no longer accepted.
+                </div>
+              {% elif user.is_authenticated %}
+                {% if user == property.created_by %}
+                  <div class="alert alert-info p-3 rounded-3 text-center mb-0" role="alert" style="border: 1px solid rgba(37,99,235,0.15); background-color: rgba(37,99,235,0.05); color: #0b215b;">
+                    <i class="bi bi-info-circle-fill me-2" style="color: #0b215b;"></i>
+                    You are the <strong>Owner</strong> of this listing.
+                  </div>
+                {% elif user.is_admin_role %}
+                  <div class="alert alert-warning p-3 rounded-3 text-center mb-0" role="alert" style="border: 1px solid rgba(220,53,69,0.15); background-color: rgba(220,53,69,0.05); color: #dc3545;">
+                    <i class="bi bi-shield-fill-exclamation me-2" style="color: #dc3545;"></i>
+                    Administrators cannot submit inquiries.
+                  </div>
+                {% else %}
+                  <form action="{% url 'inquiries:create' property.slug %}" method="post" class="vstack gap-3 mb-0">{% csrf_token %}
+                    <div>
+                      <label class="small fw-semibold text-secondary mb-1" for="id_name">Name</label>
+                      <input type="text" class="form-control" name="name" id="id_name" value="{{ user.get_full_name|default:user.username }}" placeholder="Enter your name" required>
+                    </div>
+                    <div>
+                      <label class="small fw-semibold text-secondary mb-1" for="id_email">Email</label>
+                      <input type="email" class="form-control" name="email" id="id_email" value="{{ user.email }}" placeholder="Enter your email" required>
+                    </div>
+                    <div>
+                      <label class="small fw-semibold text-secondary mb-1" for="id_phone">Phone</label>
+                      <input type="tel" class="form-control" name="phone" id="id_phone" value="{{ user.phone }}" placeholder="Enter your phone number" required>
+                    </div>
+                    <div>
+                      <label class="small fw-semibold text-secondary mb-1" for="id_message">Message</label>
+                      <textarea class="form-control" name="message" id="id_message" style="height: 90px" placeholder="Enter your message" required>I am interested in this property and would like to schedule a virtual tour or site visit.</textarea>
+                    </div>
+                    <button type="submit" class="pv-btn pv-btn-primary w-100 py-2.5"><i class="bi bi-envelope"></i> Send inquiry</button>
+                    <!-- Phase 8: AI Inquiry Draft Button -->
+                    {% if user.is_authenticated %}
+                    <button type="button" class="pv-btn pv-btn-ghost w-100" id="ai-draft-btn" onclick="generateDraft()" style="font-size: 0.85rem;">
+                      <i class="bi bi-stars text-primary"></i> Generate Professional Inquiry
+                    </button>
+                    {% endif %}
+                  </form>
+                {% endif %}
+              {% else %}
+                <div class="text-center py-2">
+                  <p class="small pv-muted mb-3">Login to contact the seller directly.</p>
+                  <a class="pv-btn pv-btn-primary w-100 py-2.5" href="{% url 'accounts:login' %}?next={{ request.path }}">Login to inquire</a>
+                </div>
+              {% endif %}
+            </div>
+            
+            <!-- Listing Owner Card (Compact avatar + details) -->
+            <div class="pv-card p-4 shadow-sm" style="border-radius: 20px; border: 1px solid var(--pv-line); background: white;">
+              <div class="d-flex align-items-center gap-3">
+                {% if property.created_by.avatar %}
+                  <img class="pv-avatar" src="{{ property.created_by.avatar.url }}" alt="avatar" style="width: 38px; height: 38px; object-fit: cover; border-radius: 50%;">
+                {% else %}
+                  <div class="pv-avatar bg-primary text-white fw-bold d-flex align-items-center justify-content-center" style="width: 38px; height: 38px; font-size: 0.9rem; border-radius: 50%;">{{ property.created_by.username|slice:":2"|upper }}</div>
+                {% endif %}
+                <div>
+                  <strong class="text-dark d-block" style="font-size: 0.9rem; line-height: 1.2;">{{ property.created_by.get_full_name|default:property.created_by.username }}</strong>
+                  <span class="text-muted small d-block" style="font-size: 0.75rem; line-height: 1.1;">{{ property.created_by.get_role_display|default:property.created_by.role|title }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Finance Calculator Card -->
+            <div class="pv-card grid-sidebar-calculator p-4 shadow-sm" style="border-radius: 20px; border: 1px solid var(--pv-line); background: white; min-height: 320px; overflow: visible !important;">
+              <h3 class="h5 fw-bold mb-3 text-dark"><i class="bi bi-calculator text-primary"></i> Finance Calculator</h3>
+              <div class="vstack gap-3 mb-3">
+                <div>
+                  <label class="small fw-semibold text-secondary mb-1">Property Price (Rs)</label>
+                  <input type="number" id="emi-price" class="form-control" value="{{ property.price|floatformat:0 }}" oninput="calculateEMI()">
+                </div>
+                <div class="row g-2">
+                  <div class="col-6">
+                    <label class="small fw-semibold text-secondary mb-1">Down %</label>
+                    <input type="number" id="emi-downpayment-pct" class="form-control" value="20" min="0" max="100" oninput="calculateEMI()">
+                  </div>
+                  <div class="col-6">
+                    <label class="small fw-semibold text-secondary mb-1">Interest %</label>
+                    <input type="number" id="emi-interest" class="form-control" value="8.5" step="0.1" min="0" max="100" oninput="calculateEMI()">
+                  </div>
+                </div>
+                <div>
+                  <label class="small fw-semibold text-secondary mb-1">Tenure (Years)</label>
+                  <input type="number" id="emi-tenure" class="form-control" value="20" min="1" max="50" oninput="calculateEMI()">
+                </div>
+              </div>
+              <hr class="my-3" style="border-top: 1px solid var(--pv-line);">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="small text-secondary">Loan Amount</span>
+                <strong id="emi-loan-amount" class="text-dark">Rs 0</strong>
+              </div>
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="small text-secondary">Monthly EMI</span>
+                <strong id="emi-monthly-emi" class="text-primary fw-bold">Rs 0</strong>
+              </div>
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="small text-secondary">Total Interest</span>
+                <strong id="emi-total-interest" class="text-dark">Rs 0</strong>
+              </div>
+              <div class="d-flex justify-content-between align-items-center mb-0">
+                <span class="small text-secondary">Total Payment</span>
+                <strong id="emi-total-payment" class="text-dark">Rs 0</strong>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+window.addEventListener("load", () => {
+  window.initDetailMap && window.initDetailMap();
+  calculateEMI();
+  {% if user.is_authenticated %}
+  loadInsights();
+  {% endif %}
+  // Phase 3: Initialize gallery counter
+  initGalleryCounter();
+
+  // Force is-loaded class on cached gallery images immediately
+  document.querySelectorAll('.detail-gallery-premium img').forEach(img => {
+    if (img.complete) {
+      img.classList.add('is-loaded');
+    } else {
+      img.addEventListener('load', () => img.classList.add('is-loaded'));
+    }
+  });
+});
+
+// Phase 3: Gallery counter - updates "Photo X of Y" on slide change
+function initGalleryCounter() {
+  const carousel = document.getElementById('propertyGalleryCarousel');
+  const counter = document.getElementById('gallery-counter');
+  if (!carousel || !counter) return;
+  const items = carousel.querySelectorAll('.carousel-item');
+  const total = items.length;
+  if (total <= 1) {
+    // Hide nav bar if only 1 photo
+    const navBar = carousel.querySelector('.gallery-glass-control-bar');
+    if (navBar) navBar.style.display = 'none';
+    return;
+  }
+  function updateCounter() {
+    const active = carousel.querySelector('.carousel-item.active');
+    const idx = Array.from(items).indexOf(active) + 1;
+    counter.textContent = 'Photo ' + idx + ' of ' + total;
+  }
+  updateCounter();
+  carousel.addEventListener('slid.bs.carousel', updateCounter);
+}
+
+function calculateEMI() {
+  const price = parseFloat(document.getElementById('emi-price').value) || 0;
+  const downPaymentPct = parseFloat(document.getElementById('emi-downpayment-pct').value) || 0;
+  const annualInterestRate = parseFloat(document.getElementById('emi-interest').value) || 0;
+  const tenureYears = parseFloat(document.getElementById('emi-tenure').value) || 0;
+
+  const loanAmount = price * (1 - downPaymentPct / 100);
+  const monthlyInterestRate = (annualInterestRate / 12) / 100;
+  const numberOfPayments = tenureYears * 12;
+
+  let monthlyEMI = 0;
+  if (numberOfPayments > 0) {
+    if (monthlyInterestRate === 0) {
+      monthlyEMI = loanAmount / numberOfPayments;
+    } else {
+      monthlyEMI = loanAmount * monthlyInterestRate * Math.pow(1 + monthlyInterestRate, numberOfPayments) / (Math.pow(1 + monthlyInterestRate, numberOfPayments) - 1);
+    }
+  }
+
+  const totalPayment = monthlyEMI * numberOfPayments;
+  const totalInterest = totalPayment - loanAmount;
+
+  const formatter = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
+
+  document.getElementById('emi-loan-amount').textContent = formatter.format(loanAmount);
+  document.getElementById('emi-monthly-emi').textContent = formatter.format(monthlyEMI);
+  document.getElementById('emi-total-interest').textContent = formatter.format(totalInterest);
+  document.getElementById('emi-total-payment').textContent = formatter.format(totalPayment);
+}
+
+function shareProperty() {
+  const shareData = {
+    title: "{{ property.title|escapejs }}",
+    text: "Check out {{ property.title|escapejs }} on PropVista!",
+    url: window.location.href
+  };
+  if (navigator.share) {
+    navigator.share(shareData)
+      .catch((err) => {
+        copyFallback();
+      });
+  } else {
+    copyFallback();
+  }
+}
+function copyFallback() {
+  navigator.clipboard.writeText(window.location.href)
+    .then(() => {
+      const shareBtn = document.getElementById('share-btn');
+      const origHtml = shareBtn.innerHTML;
+      shareBtn.innerHTML = '<i class="bi bi-check2 text-success"></i> Link copied!';
+      setTimeout(() => {
+        shareBtn.innerHTML = origHtml;
+      }, 2000);
+    })
+    .catch((err) => {
+      alert('Could not copy link to clipboard.');
+    });
+}
+</script>
+<script>
+function scrollToInquiry() {
+  const card = document.getElementById('inquiry-form-card');
+  if (!card) return;
+  // Use 'start' so the form heading is visible at top of viewport (better on mobile)
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // Highlight the card
+  card.style.transition = 'box-shadow 0.3s ease, border-color 0.3s ease';
+  card.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.35), 0 14px 40px rgba(37, 99, 235, 0.20)';
+  card.style.borderColor = 'rgba(37, 99, 235, 0.5)';
+  // Focus first input if available
+  setTimeout(() => {
+    const firstInput = card.querySelector('input, textarea');
+    if (firstInput) firstInput.focus();
+    // Remove highlight after 2s
+    setTimeout(() => {
+      card.style.boxShadow = '';
+      card.style.borderColor = '';
+    }, 2000);
+  }, 600);
+}
+</script>
+<script>
+// Phase 7: AI Property Insights
+async function loadInsights() {
+  const btn = document.getElementById('ai-insights-btn');
+  const loading = document.getElementById('ai-insights-loading');
+  const content = document.getElementById('ai-insights-content');
+  const error = document.getElementById('ai-insights-error');
+
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Analysing…'; }
+  loading && (loading.style.display = 'block');
+  content && (content.style.display = 'none');
+  error && (error.style.display = 'none');
+
+  try {
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+    const res = await fetch('{% url "properties:ai_insights" property.slug %}', {
+      method: 'POST',
+      headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    const data = await res.json();
+    
+    // Render score & position
+    const scoreEl = document.getElementById('ai-score');
+    if (scoreEl) scoreEl.textContent = data.score ? data.score : 'N/A';
+    
+    const posEl = document.getElementById('ai-market-position');
+    if (posEl) posEl.textContent = data.market_position ? data.market_position : 'Stable';
+    
+    // Render strengths
+    const strengthsList = document.getElementById('ai-strengths');
+    if (strengthsList && data.strengths) {
+      strengthsList.innerHTML = data.strengths.map(s => `<li class="d-flex gap-2 align-items-start mb-2"><i class="bi bi-check-lg text-success flex-shrink-0 mt-0.5 fs-5"></i><span>${s}</span></li>`).join('');
+    }
+    
+    // Render outlooks
+    const outShortEl = document.getElementById('ai-outlook-short');
+    if (outShortEl) outShortEl.textContent = data.outlook_short ? data.outlook_short : 'Moderate appreciation potential';
+    
+    const outLongEl = document.getElementById('ai-outlook-long');
+    if (outLongEl) outLongEl.textContent = data.outlook_long ? data.outlook_long : 'Strong appreciation potential';
+
+    // Render suitability
+    const suitBestList = document.getElementById('ai-suitability-best');
+    if (suitBestList && data.suitability_best) {
+      suitBestList.innerHTML = data.suitability_best.map(item => `<li class="d-flex gap-1 align-items-center mb-1 text-success"><i class="bi bi-check-lg flex-shrink-0"></i><span>${item}</span></li>`).join('');
+    }
+    
+    const suitLessList = document.getElementById('ai-suitability-less');
+    if (suitLessList && data.suitability_less) {
+      suitLessList.innerHTML = data.suitability_less.map(item => `<li class="d-flex gap-1 align-items-center mb-1 text-danger"><i class="bi bi-x-lg flex-shrink-0"></i><span>${item}</span></li>`).join('');
+    }
+
+    // Render considerations
+    const consList = document.getElementById('ai-considerations');
+    if (consList && data.considerations) {
+      consList.innerHTML = data.considerations.map(c => `<li class="d-flex gap-2 align-items-start mb-2"><i class="bi bi-exclamation-triangle-fill text-warning flex-shrink-0 mt-0.5"></i><span>${c}</span></li>`).join('');
+    }
+    
+    // Show fallback note if applicable
+    const fallbackNote = document.getElementById('ai-fallback-note');
+    if (fallbackNote && data.fallback) fallbackNote.style.display = 'block';
+    loading && (loading.style.display = 'none');
+    content && (content.style.display = 'block');
+  } catch(e) {
+    loading && (loading.style.display = 'none');
+    error && (error.style.display = 'block');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-stars text-primary"></i> Regenerate'; }
+  }
+}
+
+// Phase 8: AI Inquiry Draft
+async function generateDraft() {
+  const btn = document.getElementById('ai-draft-btn');
+  const msgField = document.getElementById('id_message');
+  if (!msgField) return;
+
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Drafting…'; }
+
+  try {
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+    const res = await fetch('{% url "properties:ai_draft_inquiry" property.slug %}', {
+      method: 'POST',
+      headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    const data = await res.json();
+    if (data.draft) {
+      msgField.value = data.draft;
+      // Brief highlight to show it was updated
+      msgField.style.transition = 'border-color 0.3s ease';
+      msgField.style.borderColor = 'rgba(37,99,235,0.6)';
+      msgField.style.boxShadow = '0 0 0 2px rgba(37,99,235,0.15)';
+      msgField.focus();
+      setTimeout(() => {
+        msgField.style.borderColor = '';
+        msgField.style.boxShadow = '';
+      }, 2000);
+    }
+  } catch(e) {
+    // Silent fail — user still has original message
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-stars text-primary"></i> Generate Professional Inquiry'; }
+  }
+}
+</script>
+{% endblock %}
+
